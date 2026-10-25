@@ -11,11 +11,13 @@ app/
   server.js          HTTP server, port from PORT (default 3000)
   package.json       npm start -> node server.js
   mini-app.service   systemd unit, runs /opt/mini-app/server.js as user nodeapp
+  bootstrap.sh       installs the app folder it sits in as a systemd service
 ```
 
 ## Requirements
 
-- Node.js 18 or newer
+- Ubuntu (tested on 24.04) with `apt`
+- Node.js 18 or newer (`bootstrap.sh` installs it)
 - systemd (only for the service install)
 
 ## Run locally
@@ -28,45 +30,32 @@ curl -i localhost:3000/health
 
 ## Install as a service on a Linux host
 
-Run on the target machine as root:
+Clone the repo and run `bootstrap.sh` as root:
 
 ```bash
 git clone https://github.com/zenki209/nodejs_dump_app.git
-cd nodejs_dump_app/app
-
-useradd -r -s /sbin/nologin nodeapp
-mkdir -p /opt/mini-app
-cp server.js package.json /opt/mini-app/
-chown -R nodeapp:nodeapp /opt/mini-app
-
-cp mini-app.service /etc/systemd/system/
-systemctl daemon-reload
-systemctl enable --now mini-app
-
-curl -i localhost:3000/health
+sudo bash nodejs_dump_app/app/bootstrap.sh
 ```
 
-The unit expects Node at `/usr/bin/node`. If `which node` prints another path, edit `ExecStart` in `mini-app.service` before copying it.
+`bootstrap.sh`:
 
-## Install with bootstrap.sh
+1. installs `nodejs` and `curl` with `apt`
+2. creates the system user `nodeapp` if missing
+3. copies the folder it lives in (`app/`) to `/opt/mini-app`
+4. installs `mini-app.service` into systemd, enables it and restarts it
+5. calls `http://localhost:3000/health` up to 10 times; exits `1` and prints the service log if it never gets `200`
 
-`bootstrap.sh` (kept in the Packer project, not in this repo) automates the steps above: it installs `git` and `nodejs`, clones this repo, copies `app/` to `/opt/mini-app`, installs and starts the service, then checks `/health`.
+Running it again redeploys the code and restarts the service. After install, `/opt/mini-app/bootstrap.sh` can also be re-run in place.
+
+To deploy a new version on an existing host:
 
 ```bash
-sudo REPO_URL=https://github.com/zenki209/nodejs_dump_app.git bash bootstrap.sh
+cd nodejs_dump_app && git pull && sudo bash app/bootstrap.sh
 ```
 
-Optional environment variables:
+## Build an AMI with Packer
 
-| Variable       | Default         | Meaning                               |
-|----------------|-----------------|---------------------------------------|
-| `REPO_REF`     | `main`          | Branch or tag to clone                |
-| `APP_SUBDIR`   | `app`           | Folder in this repo holding the app   |
-| `INSTALL_DIR`  | `/opt/mini-app` | Install location                      |
-| `SERVICE_NAME` | `mini-app`      | systemd unit name                     |
-| `APP_USER`     | `nodeapp`       | User the service runs as              |
-
-The Packer template runs the same script during the AMI build, with `repo_url`, `repo_ref` and `app_subdir` set in its variable file.
+The Packer project clones this repo in EC2 user data and runs `app/bootstrap.sh` during the image build, so the AMI boots with the service already enabled. Branch or tag is chosen with its `repo_ref` variable.
 
 ## Operate
 
