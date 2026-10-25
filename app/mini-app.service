@@ -1,0 +1,15 @@
+[Unit]
+Description=Mini Node.js app
+After=network.target
+
+[Service]
+Type=simple
+User=nodeapp
+WorkingDirectory=/opt/mini-app
+Environment=PORT=3000
+ExecStart=/usr/bin/node /opt/mini-app/server.js
+Restart=always
+RestartSec=2
+
+[Install]
+WantedBy=multi-user.target
